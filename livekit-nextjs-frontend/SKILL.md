@@ -44,8 +44,16 @@ LiveKit uses JWT-based access tokens signed with your API secret. Tokens must be
 
 **Environment Setup (.env.local):**
 ```env
+# Client-accessible (for LiveKitRoom component)
+NEXT_PUBLIC_LIVEKIT_URL=wss://your-project.livekit.cloud
+
+# Server-only (never exposed to client)
 LIVEKIT_API_KEY=your-api-key
 LIVEKIT_API_SECRET=your-api-secret
+```
+
+**Note:** For server-side features like recording, you may also need:
+```env
 LIVEKIT_URL=wss://your-project.livekit.cloud
 ```
 
