@@ -128,6 +128,18 @@ class PromptValidator:
                             suggestion=f'Remove {char_type} from prompt instructions'
                         ))
 
+        # Check for dollar signs (should spell out prices for voice)
+        if '$' in self.prompt:
+            for i, line in enumerate(self.lines, 1):
+                if '$' in line and not any(skip in line.lower() for skip in ['omit', 'not "$', 'say "', 'don\'t']):
+                    self.issues.append(ValidationIssue(
+                        severity='info',
+                        category='Number Formatting',
+                        message='Prompt contains $ symbol which is not voice-friendly',
+                        line_number=i,
+                        suggestion='Spell out prices in prompts (e.g., "twelve dollars" not "$12")'
+                    ))
+
     def check_length(self):
         """Check prompt length."""
         word_count = len(self.prompt.split())
