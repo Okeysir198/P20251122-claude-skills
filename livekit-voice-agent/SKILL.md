@@ -86,6 +86,7 @@ class MyAgent(Agent):
     async def my_tool(self, context: RunContext, param: str):
         """Tool description for LLM."""
         # Tool logic
+        result = {"param": param, "status": "success"}
         return result, "Voice response"
 
 @agents.entrypoint
@@ -96,7 +97,7 @@ async def entrypoint(ctx: JobContext):
     session = AgentSession(
         stt=deepgram.STT(model="nova-3"),
         llm=openai.LLM(model="gpt-4.1-mini"),
-        tts=cartesia.TTS(voice="sonic"),
+        tts=cartesia.TTS(voice="79a125e8-cd45-4c13-8a67-188112f4dd22"),  # Sonic voice
         vad=silero.VAD.load(),
         turn_detection=turn_detector.MultilingualModel(languages=["en"]),
     )

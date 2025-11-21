@@ -308,7 +308,7 @@ turn_detection = turn_detector.MultilingualModel(
 ```python
 STT:  deepgram.STT(model="nova-3")
 LLM:  openai.LLM(model="gpt-4.1-mini")
-TTS:  cartesia.TTS(voice="sonic")
+TTS:  cartesia.TTS(voice="79a125e8-cd45-4c13-8a67-188112f4dd22")  # Sonic voice
 VAD:  silero.VAD.load()
 Turn: turn_detector.MultilingualModel(languages=["en"])
 ```
@@ -336,7 +336,7 @@ Turn: turn_detector.MultilingualModel()
 ```python
 STT:  deepgram.STT(model="nova-3")
 LLM:  groq.LLM(model="llama-3.3-70b-versatile")
-TTS:  cartesia.TTS(voice="sonic")
+TTS:  cartesia.TTS(voice="79a125e8-cd45-4c13-8a67-188112f4dd22")  # Sonic voice
 VAD:  silero.VAD.load()
 Turn: turn_detector.MultilingualModel()
 ```
