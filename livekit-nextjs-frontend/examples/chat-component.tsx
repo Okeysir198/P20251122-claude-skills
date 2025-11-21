@@ -12,6 +12,13 @@ import { DataPacket_Kind, RemoteParticipant } from 'livekit-client';
 import { useEffect, useState, useRef } from 'react';
 import { Send } from 'lucide-react';
 
+/**
+ * Note: This example uses lucide-react for icons. Install with:
+ * npm install lucide-react
+ *
+ * Alternatively, use text labels like "Send" or your own icon solution.
+ */
+
 interface ChatMessage {
   id: string;
   senderIdentity: string;

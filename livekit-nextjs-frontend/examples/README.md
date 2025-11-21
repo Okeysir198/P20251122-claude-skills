@@ -99,11 +99,23 @@ Lobby screen for testing devices before joining.
 
 ### 1. Install Dependencies
 
+**Core LiveKit packages:**
 ```bash
 npm install livekit-client @livekit/components-react livekit-server-sdk
-# or
-yarn add livekit-client @livekit/components-react livekit-server-sdk
 ```
+
+**For styled examples (Tailwind CSS):**
+```bash
+npm install -D tailwindcss postcss autoprefixer
+npx tailwindcss init -p
+```
+
+**For icon examples (optional):**
+```bash
+npm install lucide-react
+```
+
+Note: The examples use Tailwind CSS and lucide-react, but these are optional. You can adapt the code to use your own styling solution and icons/text alternatives.
 
 ### 2. Configure Environment Variables
 

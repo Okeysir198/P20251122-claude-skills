@@ -13,10 +13,16 @@ import {
   useTrackToggle,
   useTracks,
   VideoTrack,
-  AudioTrack,
 } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import { Mic, MicOff, Video, VideoOff, PhoneOff, Monitor } from 'lucide-react';
+
+/**
+ * Note: This example uses lucide-react for icons. Install with:
+ * npm install lucide-react
+ *
+ * Alternatively, use text labels or your own icon solution.
+ */
 
 export function CustomControls() {
   const room = useRoom();

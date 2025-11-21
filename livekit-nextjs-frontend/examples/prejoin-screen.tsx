@@ -14,6 +14,13 @@ import { useState, useEffect, useRef } from 'react';
 import { createLocalVideoTrack, createLocalAudioTrack, LocalVideoTrack, LocalAudioTrack } from 'livekit-client';
 import { Video, VideoOff, Mic, MicOff } from 'lucide-react';
 
+/**
+ * Note: This example uses lucide-react for icons. Install with:
+ * npm install lucide-react
+ *
+ * Alternatively, use SVG icons, text labels, or your own icon solution.
+ */
+
 interface PreJoinScreenProps {
   roomName: string;
   onJoin: (config: JoinConfig) => void;

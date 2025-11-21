@@ -20,9 +20,21 @@ LiveKit is a WebRTC-based platform for building real-time video, audio, and data
     "livekit-client": "latest",
     "@livekit/components-react": "latest",
     "livekit-server-sdk": "latest"
+  },
+  "devDependencies": {
+    "tailwindcss": "latest",
+    "autoprefixer": "latest",
+    "postcss": "latest"
   }
 }
 ```
+
+**Optional (for custom UI with icons):**
+```bash
+npm install lucide-react
+```
+
+The examples use Tailwind CSS for styling and lucide-react for icons. These are optional - you can use your own styling solution and icons/text alternatives.
 
 ## Architecture Patterns
 
@@ -94,7 +106,12 @@ import { LiveKitRoom, VideoConference } from '@livekit/components-react';
 import '@livekit/components-styles';
 import { useEffect, useState } from 'react';
 
-export default function RoomPage({ roomName, username }: Props) {
+interface RoomPageProps {
+  roomName: string;
+  username: string;
+}
+
+export default function RoomPage({ roomName, username }: RoomPageProps) {
   const [token, setToken] = useState('');
 
   useEffect(() => {
@@ -202,7 +219,7 @@ function ScreenShareButton() {
 
 **Subscribing to Remote Tracks:**
 ```typescript
-import { useTracks } from '@livekit/components-react';
+import { useTracks, VideoTrack } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 
 function RemoteParticipants() {
@@ -214,7 +231,7 @@ function RemoteParticipants() {
   return (
     <div className="participants-grid">
       {tracks.map((track) => (
-        <VideoTrack key={track.participant.sid} track={track.publication} />
+        <VideoTrack key={track.participant.sid} trackRef={track} />
       ))}
     </div>
   );
@@ -381,7 +398,7 @@ function PreJoinScreen({ onJoin }: { onJoin: (username: string) => void }) {
 
 ### 2. Speaker Detection
 ```typescript
-import { useTracks } from '@livekit/components-react';
+import { useTracks, VideoTrack } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 
 function ActiveSpeakerView() {
@@ -401,7 +418,7 @@ function ActiveSpeakerView() {
       {/* Show active speaker large */}
       {sortedTracks[0] && (
         <VideoTrack
-          track={sortedTracks[0].publication}
+          trackRef={sortedTracks[0]}
           className="active-speaker"
         />
       )}
@@ -411,7 +428,7 @@ function ActiveSpeakerView() {
         {sortedTracks.slice(1).map(track => (
           <VideoTrack
             key={track.participant.sid}
-            track={track.publication}
+            trackRef={track}
           />
         ))}
       </div>
