@@ -190,7 +190,7 @@ async def entrypoint(ctx: JobContext):
     await ctx.connect()
 
     welcome_agent = WelcomeAgent()
-    await session.start(ctx.room, welcome_agent)
+    await session.start(agent=welcome_agent, room=ctx.room)
 ```
 
 **Key Features:**
@@ -453,7 +453,7 @@ async def entrypoint(ctx: JobContext):
     await ctx.connect()
 
     router_agent = RouterAgent()
-    await session.start(ctx.room, router_agent)
+    await session.start(agent=router_agent, room=ctx.room)
 ```
 
 **Key Features:**

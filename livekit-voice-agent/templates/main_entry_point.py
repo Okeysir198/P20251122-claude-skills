@@ -118,7 +118,7 @@ async def entrypoint(ctx: JobContext):
     # Run the session
     # This handles the entire conversation and all agent handoffs
     try:
-        await session.start(ctx.room, intro_agent)
+        await session.start(agent=intro_agent, room=ctx.room)
     except Exception as e:
         logger.error(f"Session error: {e}", exc_info=True)
         raise

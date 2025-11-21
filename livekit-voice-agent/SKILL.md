@@ -255,7 +255,7 @@ async def entrypoint(ctx: JobContext):
     intro_agent = IntroAgent()
 
     # Run session (handles all handoffs automatically)
-    await session.start(ctx.room, intro_agent)
+    await session.start(agent=intro_agent, room=ctx.room)
 
 
 if __name__ == "__main__":
