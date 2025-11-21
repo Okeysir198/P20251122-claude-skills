@@ -2,6 +2,22 @@
 
 All notable changes to the LiveKit Voice Agent Skill will be documented in this file.
 
+## [1.0.1] - 2025-01-21
+
+### CRITICAL FIX
+- **Fixed AgentSession.start() API usage** - Corrected parameter order to match LiveKit Agents v1.3.3 API
+  - Changed from: `await session.start(ctx.room, intro_agent)` (INCORRECT)
+  - Changed to: `await session.start(agent=intro_agent, room=ctx.room)` (CORRECT)
+  - This was a critical bug that would cause immediate runtime failure
+  - Fixed in 4 locations: main_entry_point.py, SKILL.md, and multi_agent_patterns.md (2 occurrences)
+  - Verified against official LiveKit examples and source code
+
+### Verified
+- All templates still compile and validate successfully
+- Function tool return patterns confirmed correct
+- Agent handoff mechanisms verified against official examples
+- Testing patterns confirmed accurate
+
 ## [1.0.0] - 2025-01-21
 
 ### Initial Release
