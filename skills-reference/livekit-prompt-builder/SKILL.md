@@ -1,6 +1,6 @@
 ---
 name: livekit-prompt-builder
-description: Guide for creating effective prompts and instructions for LiveKit voice agents. Use when building conversational AI agents with the LiveKit Agents framework, including (1) Creating new voice agent prompts from scratch, (2) Improving existing agent instructions, (3) Optimizing prompts for text-to-speech output, (4) Integrating tool/function calling capabilities, (5) Building multi-agent systems with handoffs, (6) Ensuring voice-friendly formatting and brevity for natural conversations.
+description: Guide for creating effective prompts and instructions for LiveKit voice agents. Use when building conversational AI agents with the LiveKit Agents framework, including (1) Creating new voice agent prompts from scratch, (2) Improving existing agent instructions, (3) Optimizing prompts for text-to-speech output, (4) Integrating tool/function calling capabilities, (5) Building multi-agent systems with handoffs, (6) Ensuring voice-friendly formatting and brevity for natural conversations, (7) Iteratively improving prompts based on testing and feedback, (8) Building industry-specific agents (debt collection, healthcare, banking, customer service, front desk).
 ---
 
 # LiveKit Voice Agent Prompt Builder
@@ -22,6 +22,8 @@ For most use cases, follow this simple workflow:
 ### Step 1: Determine Your Agent Type
 
 Select the template that best matches your needs:
+
+**General Purpose:**
 
 - **Basic Assistant** (`basic-assistant.txt`) - Simple conversational agent
   - Use for: General chat, demos, minimal functionality
@@ -47,6 +49,19 @@ Select the template that best matches your needs:
   - Use for: Main entry point in multi-agent systems
   - Complexity: Medium
   - Tools: Transfer/handoff tools
+
+**Industry-Specific:**
+
+- **Front Desk Receptionist** (`front-desk-receptionist.txt`) - Professional call routing
+  - Use for: Office reception, call centers, front desk operations
+  - Complexity: Low-Medium
+  - Tools: Transfer, routing, message taking
+
+- **Debt Collection** (`debt-collection-agent.txt`) - Compliant recovery agent
+  - Use for: Debt recovery, collections, payment arrangements
+  - Complexity: High
+  - Tools: Payment processing, sentiment analysis
+  - Note: Includes FDCPA/TCPA/CFPB compliance requirements
 
 ### Step 2: Customize Your Template
 
@@ -208,6 +223,21 @@ Load reference documentation based on your specific needs:
 - Need inspiration for similar use cases
 - Comparing complexity levels
 - Learning from production patterns
+
+**Load industry-best-practices.md when:**
+- Building agents for regulated industries (healthcare, banking, debt collection)
+- Need compliance guidance (HIPAA, FDCPA, TCPA, etc.)
+- Working on industry-specific use cases (front desk, customer service, sales)
+- Require specialized tone and approach patterns
+- Need security or privacy considerations
+
+**Load iterative-improvement.md when:**
+- Improving existing prompts based on feedback
+- Analyzing test results and conversation data
+- Conducting A/B tests on prompt variations
+- Establishing metrics and measurement frameworks
+- Need systematic approach to prompt refinement
+- Want to preserve prompt structure while making improvements
 
 **Strategy:** Start minimal (templates + SKILL.md). Load references only when you hit specific challenges or need deeper guidance.
 
@@ -444,17 +474,25 @@ See healthcare and banking examples in `examples.md`.
 ## Resources
 
 **Templates:**
+
+General Purpose:
 - `assets/templates/basic-assistant.txt` - Simple conversational agent
 - `assets/templates/tool-enabled-agent.txt` - Agent with function calling
 - `assets/templates/customer-service.txt` - Support with escalation
 - `assets/templates/specialist-agent.txt` - Task-specific workflows
 - `assets/templates/multi-agent-coordinator.txt` - Router/greeter agent
 
+Industry-Specific:
+- `assets/templates/front-desk-receptionist.txt` - Professional call routing and reception
+- `assets/templates/debt-collection-agent.txt` - Compliant debt recovery (FDCPA/TCPA)
+
 **Reference Documentation:**
 - `references/prompt-components.md` - Detailed component guide
 - `references/voice-optimization.md` - TTS formatting deep dive
 - `references/tool-integration.md` - Function calling patterns
 - `references/examples.md` - Complete real-world prompts
+- `references/industry-best-practices.md` - Industry-specific patterns and compliance
+- `references/iterative-improvement.md` - Systematic prompt refinement and testing
 
 **Tools:**
 - `scripts/validate_prompt.py` - Validation script
@@ -509,12 +547,76 @@ python scripts/validate_prompt.py pizza_prompt.txt
 - If tool fails occasionally → Add error handling for out-of-stock items
 - If users interrupt with questions → Add guidance for handling interruptions
 
+## Iterative Improvement
+
+Voice agent prompts improve through continuous refinement based on real-world usage:
+
+### Quick Improvement Workflow
+
+1. **Collect feedback** - Gather test results, user feedback, conversation metrics
+2. **Identify patterns** - Look for common issues across multiple conversations
+3. **Make targeted changes** - Modify specific sections while preserving structure
+4. **Test changes** - Validate improvements with test scenarios
+5. **Measure impact** - Compare before/after metrics
+6. **Iterate** - Repeat the cycle
+
+### Key Principles
+
+- **Structure preservation** - Make minimal, targeted changes to address specific issues
+- **Data-driven** - Use evidence from tests and conversations, not guesses
+- **Version control** - Track changes and document reasons
+- **A/B testing** - When possible, run old and new versions in parallel
+- **Regression testing** - Ensure changes don't break existing functionality
+
+**For detailed guidance:** See `references/iterative-improvement.md`
+
+---
+
+## Industry-Specific Guidance
+
+Different industries require specialized approaches:
+
+**Debt Collection:**
+- Empathetic but professional tone
+- FDCPA/TCPA/CFPB compliance built-in
+- Sentiment-aware escalation
+- Payment arrangement workflows
+
+**Healthcare:**
+- HIPAA compliance and privacy protection
+- Emergency detection and routing
+- Professional, caring tone
+- Limited scope (no medical advice)
+
+**Banking/Financial:**
+- Security-first verification
+- Fraud detection awareness
+- Regulatory compliance
+- Transaction limitations
+
+**Customer Service:**
+- Empathetic problem-solving
+- Clear escalation criteria
+- Knowledge base integration
+- Omnichannel awareness
+
+**Front Desk/Reception:**
+- Professional greeting frameworks
+- Efficient call routing
+- Message taking protocols
+- After-hours handling
+
+**For detailed patterns:** See `references/industry-best-practices.md`
+
+---
+
 ## Getting Started Now
 
 1. **Pick the closest template** for your use case
 2. **Copy it** and fill in your information
 3. **Run the validator** to catch common issues
 4. **Test it** in your LiveKit agent
-5. **Come back to this skill** when you need to refine or troubleshoot
+5. **Collect feedback** and iterate based on real usage
+6. **Come back to this skill** when you need to refine or troubleshoot
 
-The templates handle 80% of the work. Focus your customization on domain-specific information, tools, and workflows.
+The templates handle 80% of the work. Focus your customization on domain-specific information, tools, and workflows. Then continuously improve based on real-world performance.
