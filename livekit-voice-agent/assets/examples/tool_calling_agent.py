@@ -9,6 +9,7 @@ This agent can:
 
 import asyncio
 import logging
+import os
 import httpx
 from dataclasses import dataclass, field
 from dotenv import load_dotenv
@@ -63,28 +64,50 @@ class ToolCallingAgent(Agent):
         logger.info(f"Looking up weather for {location}")
 
         try:
-            # Example: Call OpenWeather API
-            # response = await self.http_client.get(
-            #     "https://api.openweathermap.org/data/2.5/weather",
-            #     params={"q": location, "units": units, "appid": WEATHER_API_KEY}
-            # )
-            # data = response.json()
+            # Real implementation using OpenWeather API
+            # Get API key from environment variable
+            api_key = os.getenv("OPENWEATHER_API_KEY")
+            if not api_key:
+                return None, "Weather service is not configured. Please contact support."
 
-            # Mock response for demo
-            mock_data = {
-                "temp": 72,
-                "conditions": "sunny",
-                "humidity": 45
+            # Convert fahrenheit/celsius to API format
+            units_param = "imperial" if units == "fahrenheit" else "metric"
+
+            response = await self.http_client.get(
+                "https://api.openweathermap.org/data/2.5/weather",
+                params={
+                    "q": location,
+                    "units": units_param,
+                    "appid": api_key
+                }
+            )
+
+            if response.status_code != 200:
+                logger.error(f"Weather API error: {response.status_code}")
+                return None, f"I couldn't retrieve weather data for {location}. Please try another location."
+
+            data = response.json()
+
+            # Extract relevant data
+            weather_data = {
+                "temp": round(data["main"]["temp"]),
+                "conditions": data["weather"][0]["description"],
+                "humidity": data["main"]["humidity"],
+                "wind_speed": data["wind"]["speed"]
             }
 
             # Store location in user data
             user_data = context.userdata
             user_data.location = location
 
-            message = f"The weather in {location} is {mock_data['temp']} degrees and {mock_data['conditions']}."
+            # Create natural voice response
+            message = f"The weather in {location} is {weather_data['conditions']} with a temperature of {weather_data['temp']} degrees {units}."
 
-            return mock_data, message
+            return weather_data, message
 
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Weather API HTTP error: {e}")
+            return None, "I'm having trouble accessing the weather service right now. Please try again later."
         except Exception as e:
             logger.error(f"Weather lookup failed: {e}")
             return None, f"I couldn't look up the weather for {location}. Please try again."
@@ -107,29 +130,50 @@ class ToolCallingAgent(Agent):
         logger.info(f"Searching products: {query} in {category}")
 
         try:
-            # Example: Call your product API
-            # response = await self.http_client.post(
-            #     "https://api.yourcompany.com/products/search",
-            #     json={"query": query, "category": category, "limit": max_results}
-            # )
-            # results = response.json()
+            # Real implementation - replace with your actual API endpoint
+            api_url = os.getenv("PRODUCT_API_URL")
+            api_key = os.getenv("PRODUCT_API_KEY")
 
-            # Mock results for demo
-            mock_results = [
-                {"id": 1, "name": f"Product matching '{query}' - Item A", "price": 29.99},
-                {"id": 2, "name": f"Product matching '{query}' - Item B", "price": 49.99},
-                {"id": 3, "name": f"Product matching '{query}' - Item C", "price": 39.99},
-            ]
+            if not api_url:
+                return None, "Product search is not configured. Please contact support."
 
-            if not mock_results:
-                return None, f"I couldn't find any products matching '{query}'."
+            headers = {}
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
 
-            # Format for voice
-            summary = f"I found {len(mock_results)} products. "
-            summary += ", ".join([f"{r['name']} for ${r['price']}" for r in mock_results[:3]])
+            response = await self.http_client.post(
+                f"{api_url}/search",
+                json={
+                    "query": query,
+                    "category": category,
+                    "limit": max_results
+                },
+                headers=headers
+            )
 
-            return mock_results, summary
+            if response.status_code != 200:
+                logger.error(f"Product API error: {response.status_code}")
+                return None, "I'm having trouble searching our product catalog right now."
 
+            results = response.json()
+
+            if not results or len(results) == 0:
+                return None, f"I couldn't find any products matching '{query}'. Try a different search term."
+
+            # Format for voice - mention top 3 results
+            summary = f"I found {len(results)} products. "
+            top_products = results[:3]
+            product_descriptions = [f"{p['name']} for ${p['price']}" for p in top_products]
+            summary += ", ".join(product_descriptions)
+
+            if len(results) > 3:
+                summary += f", and {len(results) - 3} more."
+
+            return results, summary
+
+        except httpx.HTTPError as e:
+            logger.error(f"Product search HTTP error: {e}")
+            return None, "I'm having trouble accessing the product database. Please try again later."
         except Exception as e:
             logger.error(f"Product search failed: {e}")
             return None, "I encountered an error searching for products. Please try again."

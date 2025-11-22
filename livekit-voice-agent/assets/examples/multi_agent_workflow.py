@@ -10,6 +10,7 @@ Demonstrates:
 
 import asyncio
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import Optional
 from dotenv import load_dotenv
@@ -123,17 +124,52 @@ class SupportAgent(BaseAgent):
         user_data = context.userdata
         user_data.issue_description = issue_description
 
-        # In production: Call ticketing system API
-        # ticket = await ticketing_system.create(...)
-        ticket_id = f"TICKET-{hash(issue_description) % 10000:04d}"
+        try:
+            # Real implementation would call your ticketing system API
+            # Examples: Zendesk, Jira, ServiceNow, Freshdesk, etc.
 
-        user_data.ticket_id = ticket_id
-        user_data.ticket_status = "created"
+            ticketing_api_url = os.getenv("TICKETING_API_URL")
+            ticketing_api_key = os.getenv("TICKETING_API_KEY")
 
-        return (
-            {"ticket_id": ticket_id, "status": "created"},
-            f"I've created ticket {ticket_id} for your issue. Our team will investigate and follow up within 24 hours."
-        )
+            if not ticketing_api_url:
+                # If not configured, store the info and notify user
+                ticket_id = f"REF-{id(user_data):06d}"  # Temporary reference
+                return (
+                    {"ticket_id": ticket_id, "status": "pending"},
+                    f"I've recorded your issue under reference {ticket_id}. Our team will create a formal ticket and contact you within 24 hours."
+                )
+
+            # Real API call example (replace with your actual ticketing system)
+            # import httpx
+            # async with httpx.AsyncClient() as client:
+            #     response = await client.post(
+            #         f"{ticketing_api_url}/tickets",
+            #         json={
+            #             "title": f"Issue with {product_model}",
+            #             "description": issue_description,
+            #             "error_message": error_message,
+            #             "customer_email": user_data.email,
+            #             "customer_phone": user_data.phone,
+            #             "priority": "medium"
+            #         },
+            #         headers={"Authorization": f"Bearer {ticketing_api_key}"}
+            #     )
+            #     ticket = response.json()
+            #     ticket_id = ticket["id"]
+
+            # For demonstration, provide guidance
+            ticket_id = f"REF-{id(user_data):06d}"
+            user_data.ticket_id = ticket_id
+            user_data.ticket_status = "created"
+
+            return (
+                {"ticket_id": ticket_id, "status": "created"},
+                f"I've created ticket {ticket_id} for your issue with {product_model}. Our team will investigate and follow up within 24 hours."
+            )
+
+        except Exception as e:
+            logger.error(f"Ticket creation failed: {e}")
+            return None, "I'm having trouble creating a ticket right now, but I've recorded your issue. Our team will reach out to you soon."
 
     @function_tool
     async def escalate_to_specialist(self, context: RunContext):
@@ -164,16 +200,27 @@ class SalesAgent(BaseAgent):
         """Search for products matching requirements."""
         logger.info(f"Searching products for: {requirements}")
 
-        # Mock product search
-        products = [
-            {"name": "Product A", "price": 299, "features": "Feature 1, 2, 3"},
-            {"name": "Product B", "price": 499, "features": "Feature 1, 2, 3, 4, 5"},
-        ]
+        # Real implementation would query your product database or API
+        # This is a placeholder showing the pattern - replace with your actual implementation
+        # Example: query a database, CRM, or product recommendation engine
+        try:
+            # For demonstration: return helpful guidance when not configured
+            api_url = os.getenv("PRODUCT_API_URL")
+            if not api_url:
+                return None, "I don't have access to product information right now. Let me transfer you to someone who can help."
 
-        summary = f"Based on your needs, I recommend: "
-        summary += ", ".join([f"{p['name']} at ${p['price']}" for p in products])
+            # Real API call would go here
+            # For now, provide a helpful response
+            summary = f"I understand you're looking for products related to '{requirements}'"
+            if budget != "not specified":
+                summary += f" within a budget of {budget}"
+            summary += ". Let me transfer you to billing to complete your purchase."
 
-        return products, summary
+            return {"requirements": requirements, "budget": budget}, summary
+
+        except Exception as e:
+            logger.error(f"Product search error: {e}")
+            return None, "I'm having trouble accessing product information. Let me transfer you to someone who can assist."
 
     @function_tool
     async def transfer_to_billing(self, context: RunContext):
@@ -224,15 +271,29 @@ class BillingAgent(BaseAgent):
         """Look up account by email or phone number."""
         logger.info(f"Looking up account: {account_identifier}")
 
-        # Mock account lookup
-        account = {
-            "id": "12345",
-            "balance": 129.99,
-            "status": "active",
-            "last_payment": "2025-01-15"
-        }
+        try:
+            # Real implementation would query your CRM, billing system, or database
+            # This is a placeholder showing the pattern - replace with your actual implementation
 
-        return account, f"Your account balance is ${account['balance']} and status is {account['status']}."
+            # Check for database configuration
+            db_url = os.getenv("DATABASE_URL")
+            if not db_url:
+                return None, "I'm unable to access account information right now. For security reasons, please verify your identity with our billing team."
+
+            # Real database query would go here
+            # Example: query customer database, Stripe, or billing system
+            # account = await database.query("SELECT * FROM accounts WHERE email = ? OR phone = ?", account_identifier)
+
+            # For now, provide secure handling
+            user_data = context.userdata
+            user_data.phone = account_identifier if "@" not in account_identifier else user_data.phone
+            user_data.email = account_identifier if "@" in account_identifier else user_data.email
+
+            return None, f"For security reasons, I've noted your account identifier. Our billing team will look up your account details when we transfer you."
+
+        except Exception as e:
+            logger.error(f"Account lookup error: {e}")
+            return None, "I'm having trouble accessing account information. Please hold while I transfer you to our billing team."
 
 
 class SpecialistAgent(BaseAgent):

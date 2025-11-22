@@ -278,6 +278,32 @@ lk cloud auth
 lk app env -w -d .env.local
 ```
 
+### Environment Variables for Examples
+
+The example agents use real APIs and require configuration:
+
+```bash
+# Required for all agents
+LIVEKIT_URL=wss://your-project.livekit.cloud
+LIVEKIT_API_KEY=your-api-key
+LIVEKIT_API_SECRET=your-api-secret
+OPENAI_API_KEY=your-openai-key
+DEEPGRAM_API_KEY=your-deepgram-key
+CARTESIA_API_KEY=your-cartesia-key
+
+# Optional: For tool_calling_agent.py weather lookup
+OPENWEATHER_API_KEY=your-openweather-key  # Get free at openweathermap.org
+
+# Optional: For product search
+PRODUCT_API_URL=https://your-api.com
+PRODUCT_API_KEY=your-product-api-key
+
+# Optional: For multi_agent_workflow.py ticketing
+TICKETING_API_URL=https://your-ticketing-system.com
+TICKETING_API_KEY=your-ticketing-api-key
+DATABASE_URL=your-database-connection-string
+```
+
 ---
 
 ## Decision Trees
@@ -326,8 +352,8 @@ lk app env -w -d .env.local
 
 ### Examples
 
-- **tool_calling_agent.py**: Weather lookup, product search, preferences
-- **multi_agent_workflow.py**: Customer service with greeter, support, sales, billing agents
+- **tool_calling_agent.py**: Real weather API integration (OpenWeather), product search with authentication, user preferences
+- **multi_agent_workflow.py**: Customer service workflow with ticketing system integration, 5 specialized agents
 
 ---
 

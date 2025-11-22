@@ -7,6 +7,8 @@ Allow your agent to call external functions and APIs.
 ### Basic Tool Pattern
 
 ```python
+import os
+import httpx
 from livekit import agents
 from livekit.agents import function_tool, RunContext
 
@@ -16,6 +18,8 @@ class MyAgent(agents.Agent):
             instructions="""You are a helpful assistant with access to tools.
             When asked about the weather, use the lookup_weather function."""
         )
+        # Reusable HTTP client with connection pooling
+        self.http_client = httpx.AsyncClient(timeout=10.0)
 
     @function_tool
     async def lookup_weather(
@@ -30,14 +34,36 @@ class MyAgent(agents.Agent):
             location: City name or address
             units: Temperature units (fahrenheit or celsius)
         """
+        # Get API key from environment
+        api_key = os.getenv("OPENWEATHER_API_KEY")
+        if not api_key:
+            return None, "Weather service is not configured."
+
         # Call external weather API
-        weather_data = await fetch_weather_api(location, units)
+        units_param = "imperial" if units == "fahrenheit" else "metric"
+        response = await self.http_client.get(
+            "https://api.openweathermap.org/data/2.5/weather",
+            params={"q": location, "units": units_param, "appid": api_key}
+        )
+
+        if response.status_code != 200:
+            return None, f"I couldn't retrieve weather data for {location}."
+
+        data = response.json()
+        weather_data = {
+            "temp": round(data["main"]["temp"]),
+            "conditions": data["weather"][0]["description"]
+        }
 
         # Return (result_data, voice_message)
         return (
             weather_data,
-            f"The weather in {location} is {weather_data['temp']} degrees and {weather_data['conditions']}."
+            f"The weather in {location} is {weather_data['conditions']} with a temperature of {weather_data['temp']} degrees {units}."
         )
+
+    async def cleanup(self):
+        """Clean up resources."""
+        await self.http_client.aclose()
 ```
 
 **Key points**:
@@ -47,6 +73,10 @@ class MyAgent(agents.Agent):
 - Docstring describes the function and arguments
 - Return tuple: `(result_data, voice_message)`
 - Voice message is what the agent will say
+- Get API keys from environment variables (security)
+- Use httpx.AsyncClient with connection pooling for performance
+- Include error handling for failed API calls
+- Clean up resources in cleanup() method
 
 ### Tool with Silent Execution
 
