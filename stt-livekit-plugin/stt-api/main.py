@@ -185,69 +185,147 @@ async def websocket_transcribe(websocket: WebSocket):
 
         while True:
             try:
-                # Receive audio data
-                data = await websocket.receive_bytes()
-                audio_buffer.extend(data)
+                # FIX: Use receive() to handle both binary (audio) and text (control) messages
+                # This follows industry best practice from Deepgram, Google, AWS, Azure
+                message = await websocket.receive()
 
-                # Process when we have enough audio
-                if len(audio_buffer) >= bytes_per_chunk:
-                    # Convert bytes to numpy array
-                    audio_np = np.frombuffer(bytes(audio_buffer[:bytes_per_chunk]), dtype=np.int16)
-                    audio_float = audio_np.astype(np.float32) / 32768.0  # Normalize to [-1, 1]
-
-                    # Save to temp file for processing
-                    import tempfile
-                    import soundfile as sf
-
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
-                        sf.write(tmp_file.name, audio_float, sample_rate)
-                        tmp_path = tmp_file.name
-
+                # Handle text messages (control messages like end_of_stream, keepalive)
+                if "text" in message:
                     try:
-                        # Transcribe chunk
-                        segments, info = model.transcribe(
-                            tmp_path,
-                            language=language,
-                            task=task,
-                            beam_size=3,  # Lower beam size for faster processing
-                            vad_filter=True,
-                        )
+                        control_msg = json.loads(message["text"])
+                        msg_type = control_msg.get("type")
 
-                        # Send results
-                        for segment in segments:
+                        if msg_type == "keepalive":
+                            # Client keepalive - just log it
+                            logger.debug("Received keepalive from client")
+                            continue
+
+                        elif msg_type == "end_of_stream":
+                            # FIX: Client signaled end of audio stream
+                            logger.info("Received end_of_stream from client")
+
+                            # Process any remaining audio in buffer
+                            if len(audio_buffer) > 0:
+                                logger.info(f"Processing final {len(audio_buffer)} bytes of audio")
+                                audio_np = np.frombuffer(bytes(audio_buffer), dtype=np.int16)
+                                audio_float = audio_np.astype(np.float32) / 32768.0
+
+                                import tempfile
+                                import soundfile as sf
+
+                                with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
+                                    sf.write(tmp_file.name, audio_float, sample_rate)
+                                    tmp_path = tmp_file.name
+
+                                try:
+                                    segments, info = model.transcribe(
+                                        tmp_path,
+                                        language=language,
+                                        task=task,
+                                        beam_size=5,  # Higher beam for final segment
+                                        vad_filter=True,
+                                    )
+
+                                    for segment in segments:
+                                        await websocket.send_json({
+                                            "type": "final",
+                                            "text": segment.text.strip(),
+                                            "start": segment.start,
+                                            "end": segment.end,
+                                            "confidence": segment.avg_logprob,
+                                        })
+
+                                finally:
+                                    os.unlink(tmp_path)
+
+                            # Send session end confirmation (graceful shutdown pattern)
                             await websocket.send_json({
-                                "type": "final",
-                                "text": segment.text.strip(),
-                                "start": segment.start,
-                                "end": segment.end,
-                                "confidence": segment.avg_logprob,
+                                "type": "session_ended",
+                                "message": "Transcription session completed"
                             })
 
-                    finally:
-                        os.unlink(tmp_path)
+                            logger.info("Session ended gracefully")
+                            break  # Exit loop, connection will close
 
-                    # Remove processed audio from buffer, keep overlap
-                    overlap_bytes = int(sample_rate * 0.5 * 2)  # 0.5s overlap
-                    audio_buffer = audio_buffer[bytes_per_chunk - overlap_bytes:]
+                        else:
+                            logger.warning(f"Unknown control message type: {msg_type}")
+
+                    except json.JSONDecodeError:
+                        logger.warning(f"Received invalid JSON: {message['text'][:100]}")
+                        continue
+
+                # Handle binary messages (audio data)
+                elif "bytes" in message:
+                    data = message["bytes"]
+                    audio_buffer.extend(data)
+
+                    # Process when we have enough audio
+                    if len(audio_buffer) >= bytes_per_chunk:
+                        # Convert bytes to numpy array
+                        audio_np = np.frombuffer(bytes(audio_buffer[:bytes_per_chunk]), dtype=np.int16)
+                        audio_float = audio_np.astype(np.float32) / 32768.0  # Normalize to [-1, 1]
+
+                        # Save to temp file for processing
+                        import tempfile
+                        import soundfile as sf
+
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
+                            sf.write(tmp_file.name, audio_float, sample_rate)
+                            tmp_path = tmp_file.name
+
+                        try:
+                            # Transcribe chunk
+                            segments, info = model.transcribe(
+                                tmp_path,
+                                language=language,
+                                task=task,
+                                beam_size=3,  # Lower beam size for faster processing
+                                vad_filter=True,
+                            )
+
+                            # Send results
+                            for segment in segments:
+                                await websocket.send_json({
+                                    "type": "final",
+                                    "text": segment.text.strip(),
+                                    "start": segment.start,
+                                    "end": segment.end,
+                                    "confidence": segment.avg_logprob,
+                                })
+
+                        finally:
+                            os.unlink(tmp_path)
+
+                            # Remove processed audio from buffer, keep overlap
+                            overlap_bytes = int(sample_rate * 0.5 * 2)  # 0.5s overlap
+                            audio_buffer = audio_buffer[bytes_per_chunk - overlap_bytes:]
+
+                else:
+                    logger.warning(f"Received unknown message type: {list(message.keys())}")
 
             except WebSocketDisconnect:
                 logger.info("WebSocket client disconnected")
                 break
             except Exception as e:
                 logger.error(f"WebSocket processing error: {e}")
-                await websocket.send_json({
-                    "type": "error",
-                    "message": str(e)
-                })
+                try:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": str(e)
+                    })
+                except:
+                    pass  # Connection might be closed
 
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
 
     finally:
+        # Close WebSocket with proper close code (1000 = normal closure)
         try:
-            await websocket.close()
-        except:
-            pass
+            await websocket.close(code=1000)
+            logger.info("WebSocket closed")
+        except Exception as e:
+            logger.debug(f"Error closing websocket: {e}")
 
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@ from urllib.parse import urljoin
 import aiohttp
 import websockets
 from livekit import agents, rtc
-from livekit.agents import stt, utils
+from livekit.agents import stt as stt_agents, utils
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ class STTOptions:
     """Audio sample rate in Hz."""
 
 
-class STT(stt.STT):
+class STT(stt_agents.STT):
     """
     Speech-to-Text implementation for custom self-hosted STT API.
 
@@ -61,7 +61,7 @@ class STT(stt.STT):
             http_session: Optional aiohttp session for connection pooling
         """
         super().__init__(
-            capabilities=stt.STTCapabilities(
+            capabilities=stt_agents.STTCapabilities(
                 streaming=True,
                 interim_results=False,  # Whisper provides final results
             )
@@ -87,7 +87,7 @@ class STT(stt.STT):
         buffer: utils.AudioBuffer,
         *,
         language: Optional[str] = None,
-    ) -> stt.SpeechEvent:
+    ) -> stt_agents.SpeechEvent:
         """
         Perform batch transcription on an audio buffer.
 
@@ -153,15 +153,15 @@ class STT(stt.STT):
                         avg_confidence = sum(confidences) / len(confidences)
 
                     alternatives.append(
-                        stt.SpeechData(
+                        stt_agents.SpeechData(
                             text=text,
                             language=result.get("language", ""),
                             confidence=avg_confidence,
                         )
                     )
 
-                return stt.SpeechEvent(
-                    type=stt.SpeechEventType.FINAL_TRANSCRIPT,
+                return stt_agents.SpeechEvent(
+                    type=stt_agents.SpeechEventType.FINAL_TRANSCRIPT,
                     alternatives=alternatives,
                 )
 
@@ -203,7 +203,7 @@ class STT(stt.STT):
             self._session = None
 
 
-class SpeechStream(stt.SpeechStream):
+class SpeechStream(stt_agents.SpeechStream):
     """
     Streaming transcription session using WebSocket.
     """
@@ -216,7 +216,7 @@ class SpeechStream(stt.SpeechStream):
         options: STTOptions,
         language: Optional[str] = None,
     ):
-        super().__init__()
+        super().__init__(stt=stt, conn_options=agents.APIConnectOptions())
 
         self._stt = stt
         self._api_url = api_url
@@ -234,17 +234,21 @@ class SpeechStream(stt.SpeechStream):
         self._audio_queue: asyncio.Queue[Optional[rtc.AudioFrame]] = asyncio.Queue()
 
         # Event queue for receiving transcriptions
-        self._event_queue: asyncio.Queue[Optional[stt.SpeechEvent]] = asyncio.Queue()
+        self._event_queue: asyncio.Queue[Optional[stt_agents.SpeechEvent]] = asyncio.Queue()
 
-        # State
+        # State tracking
         self._closed = False
+        self._input_ended = False  # Track if end_input() was called
         self._main_task: Optional[asyncio.Task] = None
+
+        # Keepalive for long connections (industry best practice)
+        self._keepalive_task: Optional[asyncio.Task] = None
 
     def __aiter__(self):
         """Initialize async iteration and start the main task."""
         return self
 
-    async def __anext__(self) -> stt.SpeechEvent:
+    async def __anext__(self) -> stt_agents.SpeechEvent:
         """Get the next transcription event."""
         # Start the main task on first iteration
         if self._main_task is None:
@@ -285,12 +289,13 @@ class SpeechStream(stt.SpeechStream):
 
                 logger.info("STT WebSocket ready")
 
-                # Start send and receive tasks
+                # Start send, receive, and keepalive tasks
                 self._send_task = asyncio.create_task(self._send_loop())
                 self._recv_task = asyncio.create_task(self._recv_loop())
+                self._keepalive_task = asyncio.create_task(self._keepalive_loop())
 
                 # Wait for tasks to complete
-                await asyncio.gather(self._send_task, self._recv_task)
+                await asyncio.gather(self._send_task, self._recv_task, self._keepalive_task)
 
         except Exception as e:
             logger.error(f"WebSocket error: {e}")
@@ -309,14 +314,24 @@ class SpeechStream(stt.SpeechStream):
                 frame = await self._audio_queue.get()
 
                 if frame is None:
-                    # Sentinel received, stop sending
+                    # FIX: Send end-of-stream message to server (industry best practice)
+                    # All major STT providers (Deepgram, Google, AWS, Azure) use explicit signaling
+                    if self._ws and not self._ws.closed:
+                        try:
+                            await self._ws.send(json.dumps({"type": "end_of_stream"}))
+                            logger.info("Sent end_of_stream message to server")
+                        except Exception as e:
+                            logger.warning(f"Failed to send end_of_stream: {e}")
                     break
 
-                if self._ws:
-                    # Convert frame to bytes and send
+                if self._ws and not self._ws.closed:
+                    # Convert frame to bytes and send as binary frame
                     audio_data = frame.data.tobytes()
                     await self._ws.send(audio_data)
 
+        except asyncio.CancelledError:
+            logger.debug("Send loop cancelled")
+            raise
         except Exception as e:
             logger.error(f"Send loop error: {e}")
 
@@ -327,7 +342,12 @@ class SpeechStream(stt.SpeechStream):
                 message = await self._ws.recv()
 
                 # Parse JSON response
-                data = json.loads(message)
+                try:
+                    data = json.loads(message)
+                except json.JSONDecodeError:
+                    logger.warning(f"Received non-JSON message: {message[:100]}")
+                    continue
+
                 event_type = data.get("type")
 
                 if event_type == "final":
@@ -336,10 +356,10 @@ class SpeechStream(stt.SpeechStream):
                     confidence = data.get("confidence", 0.0)
 
                     if text:
-                        event = stt.SpeechEvent(
-                            type=stt.SpeechEventType.FINAL_TRANSCRIPT,
+                        event = stt_agents.SpeechEvent(
+                            type=stt_agents.SpeechEventType.FINAL_TRANSCRIPT,
                             alternatives=[
-                                stt.SpeechData(
+                                stt_agents.SpeechData(
                                     text=text,
                                     language=self._language or "",
                                     confidence=confidence,
@@ -352,12 +372,46 @@ class SpeechStream(stt.SpeechStream):
                     logger.error(f"STT error: {data.get('message')}")
                     break
 
+                elif event_type == "session_ended":
+                    # Server confirmed session end (graceful shutdown)
+                    logger.info("Server confirmed session ended")
+                    break
+
+        except asyncio.CancelledError:
+            logger.debug("Receive loop cancelled")
+            raise
+        except websockets.ConnectionClosed:
+            logger.info("WebSocket connection closed by server")
         except Exception as e:
             logger.error(f"Receive loop error: {e}")
 
         finally:
             # Signal completion
             await self._event_queue.put(None)
+
+    async def _keepalive_loop(self):
+        """
+        Send periodic keepalive messages (industry best practice).
+        Prevents connection timeout on long-running streams.
+        Based on Deepgram's recommendation of keepalive every 5s.
+        """
+        try:
+            while not self._closed and self._ws:
+                await asyncio.sleep(5.0)  # 5 second interval
+
+                if self._ws and not self._ws.closed and not self._input_ended:
+                    try:
+                        await self._ws.send(json.dumps({"type": "keepalive"}))
+                        logger.debug("Sent keepalive")
+                    except Exception as e:
+                        logger.warning(f"Keepalive failed: {e}")
+                        break
+
+        except asyncio.CancelledError:
+            logger.debug("Keepalive loop cancelled")
+            raise
+        except Exception as e:
+            logger.error(f"Keepalive loop error: {e}")
 
     def push_frame(self, frame: rtc.AudioFrame):
         """
@@ -367,6 +421,12 @@ class SpeechStream(stt.SpeechStream):
             frame: Audio frame to transcribe
         """
         if self._closed:
+            logger.debug("Cannot push frame: stream is closed")
+            return
+
+        # FIX: Reject frames after end_input() called (prevents silent data loss)
+        if self._input_ended:
+            logger.warning("Cannot push frame after end_input() called - frame will be dropped")
             return
 
         # Synchronously add frame to queue (do not create async task)
@@ -381,8 +441,17 @@ class SpeechStream(stt.SpeechStream):
         pass
 
     async def end_input(self):
-        """Signal that no more audio will be sent."""
-        await self._audio_queue.put(None)
+        """
+        Signal that no more audio will be sent.
+
+        This triggers end-of-stream signaling to the server following
+        industry best practices (Deepgram, Google, AWS, Azure pattern).
+        """
+        # FIX: Only send sentinel once to prevent multiple None values in queue
+        if not self._input_ended:
+            self._input_ended = True
+            await self._audio_queue.put(None)
+            logger.debug("end_input() called - sentinel queued")
 
     async def aclose(self):
         """Close the stream and clean up resources."""
@@ -390,22 +459,41 @@ class SpeechStream(stt.SpeechStream):
             return
 
         self._closed = True
+        logger.debug("aclose() called")
 
-        # Signal tasks to stop
-        await self._audio_queue.put(None)
-
-        # Cancel tasks
-        if self._main_task and not self._main_task.done():
-            self._main_task.cancel()
+        # FIX: Only send sentinel if not already ended (prevents duplicate None)
+        if not self._input_ended:
+            self._input_ended = True
             try:
-                await self._main_task
-            except asyncio.CancelledError:
-                pass
-        if self._send_task and not self._send_task.done():
-            self._send_task.cancel()
-        if self._recv_task and not self._recv_task.done():
-            self._recv_task.cancel()
+                await asyncio.wait_for(
+                    self._audio_queue.put(None),
+                    timeout=1.0
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Timeout queuing end sentinel")
 
-        # Close WebSocket
-        if self._ws:
-            await self._ws.close()
+        # Cancel all tasks gracefully
+        tasks_to_cancel = []
+        if self._main_task and not self._main_task.done():
+            tasks_to_cancel.append(self._main_task)
+        if self._send_task and not self._send_task.done():
+            tasks_to_cancel.append(self._send_task)
+        if self._recv_task and not self._recv_task.done():
+            tasks_to_cancel.append(self._recv_task)
+        if self._keepalive_task and not self._keepalive_task.done():
+            tasks_to_cancel.append(self._keepalive_task)
+
+        for task in tasks_to_cancel:
+            task.cancel()
+
+        # Wait for cancellation to complete
+        if tasks_to_cancel:
+            await asyncio.gather(*tasks_to_cancel, return_exceptions=True)
+
+        # Close WebSocket with proper close code (1000 = normal closure)
+        if self._ws and not self._ws.closed:
+            try:
+                await self._ws.close(code=1000)
+                logger.debug("WebSocket closed normally")
+            except Exception as e:
+                logger.warning(f"Error closing WebSocket: {e}")
